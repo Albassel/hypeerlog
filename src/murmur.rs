@@ -2,13 +2,12 @@ use std::hash::{BuildHasher, Hasher};
 
 pub struct Murmur3Hasher {
     h1: u32,
-    tail: [u8; 4], // Buffer for the last few bytes (tail)
+    tail: [u8; 4], // Buffer for the last few bytes
     tail_len: usize, // Number of bytes currently in the tail buffer
     len: usize, // Total length of bytes processed
 }
 
 impl Murmur3Hasher {
-    /// Creates a new `Murmur3Hasher` with the given seed.
     fn new(seed: u32) -> Self {
         Murmur3Hasher {
             h1: seed,
@@ -19,7 +18,7 @@ impl Murmur3Hasher {
     }
 }
 
-// Implement the `Hasher` trait for Murmur3Hasher
+
 impl Hasher for Murmur3Hasher {
     fn write(&mut self, bytes: &[u8]) {
         self.len += bytes.len();

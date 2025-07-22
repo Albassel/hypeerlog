@@ -6,3 +6,10 @@ edition = "2024"
 [dev-dependencies]
 criterion = { version = "0.6" }
 rand = "0.9.2"
+
+[[bench]]
+harness = false
+name = "performance"
+
+[profile.release]
+strip = "symbols"
