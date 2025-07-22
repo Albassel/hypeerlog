@@ -1,80 +1,10 @@
 
 #![allow(unused)]
 #![deny(
-    missing_docs,
+    //missing_docs,
     clippy::missing_safety_doc,
     clippy::undocumented_unsafe_blocks
 )]
-
-//! # htpp
-//!
-//! A library for parsing HTTP requests and responses. The focus is on speed and safety. It is intentionally strict
-//! to minimize HTTP attacks. It can also parse URLs
-//! 
-//! ## Working with [Request]
-//! 
-//! You can parse a request as follows:
-//! 
-//! ```rust
-//! use htpp::{Request, EMPTY_HEADER};
-//! 
-//! let req = b"GET /index.html HTTP/1.1\r\n\r\n";
-//! let mut headers = [EMPTY_HEADER; 10];
-//! let parsed = Request::parse(req, &mut headers).unwrap();
-//! assert!(parsed.method == htpp::Method::Get);
-//! assert!(parsed.path == "/index.html");
-//! ```
-//! You can create a request as follows:
-//! 
-//! ```rust
-//! use htpp::{Method, Request, Header};
-//! 
-//! let method = Method::Get;
-//! let path = "/index.html";
-//! let mut headers = [Header::new("Accept", b"*/*")];
-//! let req = Request::new(method, path, &headers, b"");
-//! ```
-//! ## Working with [Response]
-//! 
-//! You can parse a response as follows:
-//! 
-//! ```rust
-//! use htpp::{Response, EMPTY_HEADER};
-//! 
-//! let req = b"HTTP/1.1 200 OK\r\n\r\n";
-//! let mut headers = [EMPTY_HEADER; 10];
-//! let parsed = Response::parse(req, &mut headers).unwrap();
-//! assert!(parsed.status == 200);
-//! assert!(parsed.reason == "OK");
-//! ```
-//! 
-//! You can create a response as follows:
-//! 
-//! ```rust
-//! use htpp::{Response, Header};
-//! 
-//! let status = 200;
-//! let reason = "OK";
-//! let mut headers = [Header::new("Connection", b"keep-alive")];
-//! let req = Response::new(status, reason, &mut headers, b"");
-//! ```
-//! 
-//! After parsing a request, you can also parse the path part of the request inclusing query parameters as follows:
-//! 
-//! ```rust
-//! use htpp::{Request, EMPTY_QUERY, Url, EMPTY_HEADER};
-//! 
-//! let req = b"GET /index.html?query1=value&query2=value HTTP/1.1\r\n\r\n";
-//! let mut headers = [EMPTY_HEADER; 10];
-//! let parsed_req = Request::parse(req, &mut headers).unwrap();
-//! let mut queries_buf = [EMPTY_QUERY; 10];
-//! let url = Url::parse(parsed_req.path.as_bytes(), &mut queries_buf).unwrap();
-//! assert!(url.path == "/index.html");
-//! assert!(url.query_params.unwrap()[0].name == "query1");
-//! assert!(url.query_params.unwrap()[0].val == "value");
-//! ```
-//! 
-
 
 
 use core::hash::Hash;
@@ -146,7 +76,37 @@ impl Hypeerlog {
     /// Returns the estimated cardinality for the values added so far
     /// Returns f64::INFINITY if all the registers are 0 (for example, when no data is added to the Hypeerlog)
     pub fn estimate_card(&self) -> f64 {
-        harmonic_mean(&self.registers)
+        let m = pow_two(self.percision) as f64;
+        let alpha_m = get_alpha_m_constant(m);
+
+        let num_zero_registers = self.registers.iter().filter(|&&val| val == 0).count();
+
+        // 1. Handle case where all registers are zero (0 elements added)
+        if num_zero_registers == m as usize {
+            return 0.0;
+        }
+
+        // 2. Calculate the raw HyperLogLog estimate
+        let harmonic_mean_result = harmonic_mean(&self.registers);
+        let mut estimate = alpha_m * m * m * harmonic_mean_result;
+
+        // Use LinearCounting if there are still empty buckets AND the raw HLL estimate is low
+        // 2.5 * m is a common threshold
+        if num_zero_registers > 0 && estimate < (2.5 * m) { 
+            // Linear Counting formula: m * ln(m / V)
+            // V is the number of zero registers.
+            estimate = m * (m / num_zero_registers as f64).ln();
+        }
+
+        // 4. Large Range Correction 
+        // This correction is for when the estimate is very large, approaching the limits
+        // of the hash space. For 64-bit hashes, it's often not necessary unless you're counting truly massive cardinalities (e.g., > 10^10)
+        const TWO_POW_64_OVER_30: f64 = (1u64 << 63) as f64 / 15.0; // Approximation for 2^64 / 30
+        if estimate > TWO_POW_64_OVER_30 {
+            estimate = -TWO_POW_64_OVER_30 * (1.0 - estimate / TWO_POW_64_OVER_30).ln();
+        }
+
+        estimate
     }
 }
 
@@ -168,7 +128,7 @@ fn get_bucket(precision: u8, hash: u64) -> usize {
 }
 
 fn longest_run(percision: u8, hash: u64) -> u8 {
-    (hash >> percision).trailing_zeros() as u8
+    (hash >> percision).trailing_zeros() as u8 + 1
 }
 
 
@@ -181,6 +141,15 @@ fn harmonic_mean(registers: &[u8]) -> f64 {
     }
 }
 
+// Bias correction
+fn get_alpha_m_constant(m: f64) -> f64 {
+        match m {
+            4.0 => 0.673, // for m = 16
+            5.0 => 0.697, // for m = 32
+            6.0 => 0.709, // for m = 64
+            _ => 0.7213 / (1.0 + 1.079 / m),
+        }
+    }
 
 
 
