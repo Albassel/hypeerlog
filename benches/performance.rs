@@ -42,7 +42,7 @@ fn generate_random_list_with_cardinality(length: usize, cardinality: usize) -> R
 // Takes the true cardinality and the elements, and returns the estimated cardinality and the relative error
 fn run_trial<H: Hash>(p: u8, card: usize, elems: &[H]) -> (f64, f64) {
     let mut hll = Hypeerlog::with_percision(p);
-    hll.batch_add(elems);
+    hll.insert_many(elems);
     let estimated_cardinality = hll.cardinality();
     let relative_error = (estimated_cardinality as f64 - card as f64).abs() / card as f64;
     (estimated_cardinality, relative_error)
@@ -102,10 +102,10 @@ fn bench_merging(c: &mut Criterion) {
                     .expect("Failed to generate list two for benchmark");
 
                 let mut hll_one = Hypeerlog::new();
-                hll_one.batch_add(&list_one);
+                hll_one.insert_many(&list_one);
 
                 let mut hll_two = Hypeerlog::new();
-                hll_two.batch_add(&list_two);
+                hll_two.insert_many(&list_two);
 
                 (hll_one, hll_two)
             },

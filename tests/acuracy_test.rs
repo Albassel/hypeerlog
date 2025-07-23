@@ -30,7 +30,7 @@ fn test_accuracy() {
 fn test_dump_reload() {
     let list = generate_random_list_with_cardinality(10_000, 1000);
     let mut hll = Hypeerlog::new();
-    hll.batch_add(&list.unwrap());
+    hll.insert_many(&list.unwrap());
     let dumped = hll.dump();
     assert!(Hypeerlog::load(dumped).unwrap() == hll);
 }
@@ -44,14 +44,14 @@ fn test_merge() {
     let list_two = generate_random_list_with_cardinality(10_000, 1000);
 
     let mut hll_one = Hypeerlog::new();
-    hll_one.batch_add(list_one.as_ref().unwrap());
+    hll_one.insert_many(list_one.as_ref().unwrap());
 
     let mut hll_two = Hypeerlog::new();
-    hll_two.batch_add(list_two.as_ref().unwrap());
+    hll_two.insert_many(list_two.as_ref().unwrap());
 
     let mut hll_three = Hypeerlog::new();
-    hll_three.batch_add(&list_one.unwrap());
-    hll_three.batch_add(&list_two.unwrap());
+    hll_three.insert_many(&list_one.unwrap());
+    hll_three.insert_many(&list_two.unwrap());
 
     let merged_card = hll_one.merge(hll_two).unwrap().cardinality();
     let card = hll_three.cardinality();
@@ -106,7 +106,7 @@ fn generate_random_list_with_cardinality(length: usize, cardinality: usize) -> R
 fn run_trial<H: Hash>(p: u8, card: usize, elems: &[H]) -> (f64, f64) {
     let mut hll = Hypeerlog::with_percision(p);
 
-    hll.batch_add(elems);
+    hll.insert_many(elems);
 
     let estimated_cardinality = hll.cardinality();
     let relative_error = (estimated_cardinality as f64 - card as f64).abs() / card as f64;
