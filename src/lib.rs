@@ -11,6 +11,8 @@
 //!
 //! A blazingly fast HyperLogLog implementation that can be distributed across multiple devices
 //! 
+//! This implementes all optimizations in the Google paper (except sparse, which is planned for later):  https://research.google.com/pubs/archive/40671.pdf
+//! 
 //! ## Estimating cardinality
 //! 
 //! ```rust

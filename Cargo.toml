@@ -2,6 +2,18 @@
 name = "hypeerlog"
 version = "0.1.0"
 edition = "2024"
+authors=["Basel"]
+description="A fast and distributable HyperLogLog implementation"
+keywords=["HyperLogLog", "Collections"]
+repository="https://github.com/Albassel/hypeerlog"
+license="MIT"
+exclude = [
+    "benches/performance.rs",
+    "tests/acuracy_test.rs",
+    ".gitignore",
+    "README.md"
+]
+documentation="https://docs.rs/hypeerlog/latest/hypeerlog/"
 
 [dev-dependencies]
 criterion = { version = "0.6" }
