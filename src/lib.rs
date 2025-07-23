@@ -1,10 +1,54 @@
 
 #![allow(unused)]
 #![deny(
-    //missing_docs,
+    missing_docs,
     clippy::missing_safety_doc,
     clippy::undocumented_unsafe_blocks
 )]
+
+
+//! # hypeerlog
+//!
+//! A blazingly fast HyperLogLog implementation that can be distributed across multiple devices
+//! 
+//! ## Estimating cardinality
+//! 
+//! ```rust
+//! use hypeerlog::Hypeerlog;
+//! 
+//! let elems = vec![1, 2, 3, 4, 5, 6, 7, 1, 1, 2];
+//! 
+//! let mut hll = Hypeerlog::new();
+//! hll.batch_add(elems);
+//! 
+//! // Should be within 2% of the real cardinality
+//! hll.cardinality();
+//! ```
+//! 
+//! ## Distributing the work
+//! 
+//! You can divide the dataset onto multiple computers, dump the hll when you finish adding the data, load the dump into another computer, merge all the hll, and then calculate the cardinality of the merged hll to get the cardinality for the whole dataset:
+//! 
+//! 
+//! ```rust
+//! use hypeerlog::Hypeerlog;
+//! 
+//! let elems = vec![1, 2, 3, 4, 5, 6, 7, 1, 1, 2];
+//! 
+//! let mut hll_one = Hypeerlog::new();
+//! hll_one.batch_add(&elems[0..5]);
+//! 
+//! let mut hll_two = Hypeerlog::new();
+//! hll_two.batch_add(&elems[5..]);
+//! 
+//! hll_one.merge(hll_two).cardinality();
+//! ```
+//! 
+//!
+//! 
+//! 
+
+
 
 
 use core::hash::Hash;
@@ -86,6 +130,10 @@ impl Hypeerlog {
         }
     }
 
+    /// Constructs a hll with the given percision and seed for the internal hasher
+    /// Silently clamps the percision to 4-20
+    /// This can be useful when exposing the hll to outside users to prevent hash DoS
+    /// When constructing a new hll using this function, make sure to use a seed with an unexpected value
     pub fn with_percision_seed(percision: u8, seed: u32) -> Hypeerlog<Murmur3BuildHasher> {
         let p = percision.clamp(4, 20);
         Hypeerlog {
