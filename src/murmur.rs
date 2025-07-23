@@ -1,10 +1,14 @@
 use std::hash::{BuildHasher, Hasher};
 
+
+const C1: u32 = 0xcc9e2d51;
+const C2: u32 = 0x1b873593;
+
 pub struct Murmur3Hasher {
     h1: u32,
-    tail: [u8; 4], // Buffer for the last few bytes
+    tail: [u8; 4],   // Buffer for the last few bytes
     tail_len: usize, // Number of bytes currently in the tail buffer
-    len: usize, // Total length of bytes processed
+    len: usize,      // Total length of bytes processed
 }
 
 impl Murmur3Hasher {
@@ -18,23 +22,21 @@ impl Murmur3Hasher {
     }
 }
 
-
 impl Hasher for Murmur3Hasher {
     fn write(&mut self, bytes: &[u8]) {
         self.len += bytes.len();
-
-        const C1: u32 = 0xcc9e2d51;
-        const C2: u32 = 0x1b873593;
 
         let mut data_offset = 0;
 
         // Process any leftover tail bytes from previous writes
         if self.tail_len > 0 {
             let bytes_to_copy = (4 - self.tail_len).min(bytes.len());
-            self.tail[self.tail_len..self.tail_len + bytes_to_copy].copy_from_slice(&bytes[..bytes_to_copy]);
+            self.tail[self.tail_len..self.tail_len + bytes_to_copy]
+                .copy_from_slice(&bytes[..bytes_to_copy]);
             self.tail_len += bytes_to_copy;
             data_offset += bytes_to_copy;
 
+            // If the tail buffer is full, process it
             if self.tail_len == 4 {
                 let k1 = u32::from_le_bytes(self.tail);
                 let mut k1 = k1.wrapping_mul(C1);
@@ -50,13 +52,10 @@ impl Hasher for Murmur3Hasher {
 
         // Process 4-byte chunks from the main data
         let mut i = data_offset;
+        let ptr = bytes.as_ptr();
         while i + 4 <= bytes.len() {
-            let k1 = u32::from_le_bytes([
-                bytes[i],
-                bytes[i + 1],
-                bytes[i + 2],
-                bytes[i + 3],
-            ]);
+            // Use read_unaligned for efficient unaligned reads
+            let k1 = unsafe { (ptr.add(i) as *const u32).read_unaligned().to_le() };
 
             let mut k1 = k1.wrapping_mul(C1);
             k1 = k1.rotate_left(15);
@@ -78,52 +77,30 @@ impl Hasher for Murmur3Hasher {
 
     fn finish(&self) -> u64 {
         let mut final_h1 = self.h1;
-        const C1: u32 = 0xcc9e2d51;
-        const C2: u32 = 0x1b873593;
 
-        // Process remaining bytes (tail) that were accumulated
+        // Process remaining bytes (tail)
         let mut k1 = 0u32;
-        match self.tail_len {
-            3 => {
-                k1 ^= (self.tail[2] as u32) << 16;
-                k1 ^= (self.tail[1] as u32) << 8;
-                k1 ^= self.tail[0] as u32;
-                k1 = k1.wrapping_mul(C1);
-                k1 = k1.rotate_left(15);
-                k1 = k1.wrapping_mul(C2);
-                final_h1 ^= k1;
+        if self.tail_len > 0 {
+            for i in 0..self.tail_len {
+                k1 ^= (self.tail[i] as u32) << (8 * i);
             }
-            2 => {
-                k1 ^= (self.tail[1] as u32) << 8;
-                k1 ^= self.tail[0] as u32;
-                k1 = k1.wrapping_mul(C1);
-                k1 = k1.rotate_left(15);
-                k1 = k1.wrapping_mul(C2);
-                final_h1 ^= k1;
-            }
-            1 => {
-                k1 ^= self.tail[0] as u32;
-                k1 = k1.wrapping_mul(C1);
-                k1 = k1.rotate_left(15);
-                k1 = k1.wrapping_mul(C2);
-                final_h1 ^= k1;
-            }
-            _ => {} // No tail bytes
+            k1 = k1.wrapping_mul(C1);
+            k1 = k1.rotate_left(15);
+            k1 = k1.wrapping_mul(C2);
+            final_h1 ^= k1;
         }
 
         // Finalization mix (avalanche effect)
-        final_h1 ^= self.len as u32; // Use the total length of all written bytes
+        final_h1 ^= self.len as u32;
         final_h1 ^= final_h1.wrapping_shr(16);
         final_h1 = final_h1.wrapping_mul(0x85ebca6b);
         final_h1 ^= final_h1.wrapping_shr(13);
         final_h1 = final_h1.wrapping_mul(0xc2b2ae35);
         final_h1 ^= final_h1.wrapping_shr(16);
 
-        final_h1 as u64 // Return as u64 as required by the trait
+        final_h1 as u64
     }
 }
-
-
 
 /// A `BuildHasher` for `Murmur3Hasher`
 #[derive(Default, Debug, Eq, PartialEq)]

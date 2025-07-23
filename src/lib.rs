@@ -21,7 +21,7 @@
 //! let elems = vec![1, 2, 3, 4, 5, 6, 7, 1, 1, 2];
 //! 
 //! let mut hll = Hypeerlog::new();
-//! hll.batch_add(elems);
+//! hll.insert_many(&elems);
 //! 
 //! // Should be within 2% of the real cardinality
 //! hll.cardinality();
@@ -38,16 +38,13 @@
 //! let elems = vec![1, 2, 3, 4, 5, 6, 7, 1, 1, 2];
 //! 
 //! let mut hll_one = Hypeerlog::new();
-//! hll_one.batch_add(&elems[0..5]);
+//! hll_one.insert_many(&elems[0..5]);
 //! 
 //! let mut hll_two = Hypeerlog::new();
-//! hll_two.batch_add(&elems[5..]);
+//! hll_two.insert_many(&elems[5..]);
 //! 
-//! hll_one.merge(hll_two).cardinality();
+//! hll_one.merge(hll_two).unwrap().cardinality();
 //! ```
-//! 
-//!
-//! 
 //! 
 
 
@@ -97,17 +94,26 @@ where
             registers: vec![0; pow_two(p) as usize],
         }
     }
+
+    /// Reloads a dumped hll with the given hasher
+    /// Returns an error when the bytes passed are not a valud hll
+    pub fn load_with_hasher(mut bytes: Vec<u8>, hasher_builder: S) -> Result<Self, ()> {
+        let p = bytes.pop();
+        if p.is_none() {return Err(());}
+        if bytes.len() != (pow_two(p.unwrap()) as usize) {return Err(());}
+        Ok(Hypeerlog {
+            hasher: hasher_builder,
+            percision: p.unwrap(),
+            registers: bytes,
+        })
+    }
 }
 
 
 impl Hypeerlog {
     /// Create a new hll with a percision of 14 (sufficient for most cases)
     pub fn new() -> Hypeerlog<Murmur3BuildHasher> {
-        Hypeerlog {
-            hasher: Murmur3BuildHasher::new(0),
-            percision: 14,
-            registers: vec![0; pow_two(14) as usize],
-        }
+        Self::with_percision(14)
     }
 
     /// Constructs a hll with the given percision
@@ -150,8 +156,8 @@ impl Hypeerlog {
         self.registers.len()
     }
 
-    /// Adds data to this Hyperloglog to count the cardinality
-    pub fn add<H: Hash>(&mut self, data: H) {
+    /// Inserts data to this Hyperloglog to count the cardinality
+    pub fn insert<H: Hash>(&mut self, data: H) {
         let mut hasher = self.hasher.build_hasher();
         data.hash(&mut hasher);
         let hash = hasher.finish();
@@ -159,11 +165,17 @@ impl Hypeerlog {
         self.registers[register_idx] = longest_run(self.percision, hash).max(self.registers[register_idx]);
     }
 
-    /// Adds a whole slice of data to this Hyperloglog to count the cardinality
-    pub fn batch_add<H: Hash>(&mut self, data: &[H]) {
+    /// Inserts a whole slice of data to this Hyperloglog to count the cardinality
+    pub fn insert_many<H: Hash>(&mut self, data: &[H]) {
         for elem in data {
-            self.add(elem);
+            self.insert(elem);
         }
+    }
+
+
+    /// Checks whether the hll is empty (i,e there were no data inserted)
+    pub fn is_empty<H: Hash>(&self) -> bool {
+        self.registers.iter().all(|&val| val == 0)
     }
 
 
@@ -198,17 +210,11 @@ impl Hypeerlog {
             return Err(());
         }
 
-        for i in 0..self.registers.len() {
-            self.registers[i] = self.registers[i].max(other.registers[i]);
-        }
+        self.registers.iter_mut()
+            .zip(other.registers.iter())
+            .for_each(|(a, b)| *a = a.clone().max(b.clone()));
 
-        Ok(
-            Hypeerlog {
-                hasher: self.hasher,
-                percision: self.percision,
-                registers: self.registers,
-            }
-        )
+        Ok(self)
     }
 
     /// Returns a Vec<u8> representing the internal state of the hll
