@@ -126,7 +126,7 @@ impl Hasher for Murmur3Hasher {
 
 
 /// A `BuildHasher` for `Murmur3Hasher`
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Eq, PartialEq)]
 pub struct Murmur3BuildHasher {
     seed: u32,
 }

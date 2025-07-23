@@ -34,7 +34,6 @@ where
     S: BuildHasher + Debug,
 {
     /// Creates a new instance with the given Hasher
-    /// Silently clamps the percision to 4-18 (inclusive)
     pub fn with_hasher(hasher_builder: S) -> Self {
         Hypeerlog {
             hasher: hasher_builder,
@@ -42,12 +41,10 @@ where
             registers: vec![0; pow_two(14) as usize],
         }
     }
-    /// Creates a new instance with the given Hasher
-    /// Silently clamps the percision to 4-18 (inclusive)
-    /// Constructs a Hypeerlog with the given percision and Hasher
-    /// Silently clamps the percision to 4-20
+    /// Creates a new instance with the given Hasher and percision
+    /// Silently clamps the percision to 4-25
     pub fn with_hasher_percision(percision: u8, hasher_builder: S) -> Self {
-        let p = percision.clamp(4, 20);
+        let p = percision.clamp(4, 25);
         Hypeerlog {
             hasher: hasher_builder,
             percision: p,
@@ -58,7 +55,7 @@ where
 
 
 impl Hypeerlog {
-    /// Create a new Hypeerlog
+    /// Create a new hll with a percision of 14 (sufficient for most cases)
     pub fn new() -> Hypeerlog<Murmur3BuildHasher> {
         Hypeerlog {
             hasher: Murmur3BuildHasher::new(0),
@@ -67,7 +64,7 @@ impl Hypeerlog {
         }
     }
 
-    /// Constructs a Hypeerlog with the given percision
+    /// Constructs a hll with the given percision
     /// Silently clamps the percision to 4-20
     pub fn with_percision(percision: u8) -> Hypeerlog<Murmur3BuildHasher> {
         let p = percision.clamp(4, 20);
@@ -76,6 +73,31 @@ impl Hypeerlog {
             percision: p,
             registers: vec![0; pow_two(p) as usize],
         }
+    }
+
+    /// Constructs a new Hypeerlog with an internal hasher with the given seed
+    /// This can be useful when exposing the hll to outside users to prevent hash DoS
+    /// When constructing a new hll using this function, make sure to use a seed with an unexpected value
+    pub fn with_seed(seed: u32) -> Hypeerlog<Murmur3BuildHasher> {
+        Hypeerlog {
+            hasher: Murmur3BuildHasher::new(seed),
+            percision: 14,
+            registers: vec![0; pow_two(14) as usize],
+        }
+    }
+
+    pub fn with_percision_seed(percision: u8, seed: u32) -> Hypeerlog<Murmur3BuildHasher> {
+        let p = percision.clamp(4, 20);
+        Hypeerlog {
+            hasher: Murmur3BuildHasher::new(seed),
+            percision: p,
+            registers: vec![0; pow_two(p) as usize],
+        }
+    }
+
+    /// The number of registeres used internally
+    pub fn registers(&self) -> usize {
+        self.registers.len()
     }
 
     /// Adds data to this Hyperloglog to count the cardinality
@@ -96,7 +118,7 @@ impl Hypeerlog {
 
 
     /// Returns the estimated cardinality for the values added so far
-    pub fn estimate_card(&self) -> f64 {
+    pub fn cardinality(&self) -> f64 {
         let m = pow_two(self.percision) as f64;
         let alpha_m = get_alpha_m_bias(m);
 
@@ -116,6 +138,51 @@ impl Hypeerlog {
             estimate = m * (m / num_zero_registers as f64).ln();
         }
         estimate
+    }
+
+    /// Merges 2 HyperLogLogs, returning the merged hll
+    /// The percision of the 2 hll must be the same or an error is returned
+    /// The 2 hll can use different hashers, but the hasher used for the merged hll is that of the first
+    pub fn merge(mut self, other: Self) -> Result<Self, ()> {
+        if self.percision != other.percision {
+            return Err(());
+        }
+
+        for i in 0..self.registers.len() {
+            self.registers[i] = self.registers[i].max(other.registers[i]);
+        }
+
+        Ok(
+            Hypeerlog {
+                hasher: self.hasher,
+                percision: self.percision,
+                registers: self.registers,
+            }
+        )
+    }
+
+    /// Returns a Vec<u8> representing the internal state of the hll
+    /// You can then load that dump and continue from where you started
+    /// This can be useful for distributing the computation over many devices, 
+    /// for example, by writing the dump to a file, loading the dump on another 
+    /// device, and merging the hll
+    pub fn dump(&self) -> Vec<u8> {
+        let mut clone = self.registers.clone();
+        clone.push(self.percision);
+        clone
+    }
+
+    /// Reloads a dumped hll with the default hasher
+    /// Returns an error when the bytes passed are not a valud hll
+    pub fn load(mut bytes: Vec<u8>) -> Result<Self, ()> {
+        let p = bytes.pop();
+        if p.is_none() {return Err(());}
+        if bytes.len() != (pow_two(p.unwrap()) as usize) {return Err(());}
+        Ok(Hypeerlog {
+            hasher: Murmur3BuildHasher::new(0),
+            percision: p.unwrap(),
+            registers: bytes,
+        })
     }
 }
 

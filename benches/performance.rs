@@ -43,7 +43,7 @@ fn generate_random_list_with_cardinality(length: usize, cardinality: usize) -> R
 fn run_trial<H: Hash>(p: u8, card: usize, elems: &[H]) -> (f64, f64) {
     let mut hll = Hypeerlog::with_percision(p);
     hll.batch_add(elems);
-    let estimated_cardinality = hll.estimate_card();
+    let estimated_cardinality = hll.cardinality();
     let relative_error = (estimated_cardinality as f64 - card as f64).abs() / card as f64;
     (estimated_cardinality, relative_error)
 }
@@ -55,7 +55,7 @@ const CARDS: [u32; 4] = [700, 800, 900, 1000];
 
 
 fn bench_hll_combinations(c: &mut Criterion) {
-    let mut group = c.benchmark_group("HLL_Performance");
+    let mut group = c.benchmark_group("HLL_adding_and_calculating");
 
     group.sample_size(30);
     group.warm_up_time(std::time::Duration::from_secs(1));
@@ -85,6 +85,41 @@ fn bench_hll_combinations(c: &mut Criterion) {
 
 
 
+fn bench_merging(c: &mut Criterion) {
+    let mut group = c.benchmark_group("HLL_merging");
+
+    group.sample_size(30);
+    group.warm_up_time(std::time::Duration::from_secs(1));
+
+    group.bench_function("merge", move |b| {
+        b.iter_batched(
+            // SETUP CLOSURE: This closure runs BEFORE EACH timed iteration.
+            || {
+                // Generate fresh lists for each HLL for each benchmark run
+                let list_one = generate_random_list_with_cardinality(10_000, CARDS[0] as usize)
+                    .expect("Failed to generate list one for benchmark");
+                let list_two = generate_random_list_with_cardinality(10_000, CARDS[0] as usize)
+                    .expect("Failed to generate list two for benchmark");
+
+                let mut hll_one = Hypeerlog::new();
+                hll_one.batch_add(&list_one);
+
+                let mut hll_two = Hypeerlog::new();
+                hll_two.batch_add(&list_two);
+
+                (hll_one, hll_two)
+            },
+            // BENCHMARK CLOSURE: it receives the state returned by the setup closure
+            |(hll_one, hll_two)| {
+                let _ = black_box(hll_one.merge(hll_two));
+            },
+            criterion::BatchSize::SmallInput 
+        );
+    });
+    group.finish();
+}
+
+
 
 
 
@@ -95,5 +130,5 @@ fn bench_hll_combinations(c: &mut Criterion) {
 //--------------
 
 
-criterion_group!(benches, bench_hll_combinations);
+criterion_group!(benches, bench_hll_combinations, bench_merging);
 criterion_main!(benches);

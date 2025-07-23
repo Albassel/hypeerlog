@@ -26,6 +26,41 @@ fn test_accuracy() {
 
 
 
+#[test]
+fn test_dump_reload() {
+    let list = generate_random_list_with_cardinality(10_000, 1000);
+    let mut hll = Hypeerlog::new();
+    hll.batch_add(&list.unwrap());
+    let dumped = hll.dump();
+    assert!(Hypeerlog::load(dumped).unwrap() == hll);
+}
+
+
+
+
+#[test]
+fn test_merge() {
+    let list_one = generate_random_list_with_cardinality(10_000, 1000);
+    let list_two = generate_random_list_with_cardinality(10_000, 1000);
+
+    let mut hll_one = Hypeerlog::new();
+    hll_one.batch_add(list_one.as_ref().unwrap());
+
+    let mut hll_two = Hypeerlog::new();
+    hll_two.batch_add(list_two.as_ref().unwrap());
+
+    let mut hll_three = Hypeerlog::new();
+    hll_three.batch_add(&list_one.unwrap());
+    hll_three.batch_add(&list_two.unwrap());
+
+    let merged_card = hll_one.merge(hll_two).unwrap().cardinality();
+    let card = hll_three.cardinality();
+
+    assert!(merged_card == card);
+}
+
+
+
 
 fn generate_random_list_with_cardinality(length: usize, cardinality: usize) -> Result<Vec<u64>, String> {
     if cardinality > length {
@@ -73,7 +108,7 @@ fn run_trial<H: Hash>(p: u8, card: usize, elems: &[H]) -> (f64, f64) {
 
     hll.batch_add(elems);
 
-    let estimated_cardinality = hll.estimate_card();
+    let estimated_cardinality = hll.cardinality();
     let relative_error = (estimated_cardinality as f64 - card as f64).abs() / card as f64;
 
     (estimated_cardinality, relative_error)
