@@ -111,12 +111,26 @@ where
             registers: bytes,
         })
     }
+
+    /// Reloads a dumped hll with the given hasher
+    /// Returns an error when the bytes passed are not a valud hll
+    pub fn load_with_hasher(mut bytes: Vec<u8>, hasher_builder: S) -> Result<Self, ()> {
+        let p = bytes.pop();
+        if p.is_none() {return Err(());}
+        if bytes.len() != (pow_two(p.unwrap()) as usize) {return Err(());}
+        Ok(Hypeerlog {
+            hasher: hasher_builder,
+            percision: p.unwrap(),
+            registers: bytes,
+        })
+    }
 }
 
 
 impl Hypeerlog {
     /// Create a new hll with a percision of 14 (sufficient for most cases)
     pub fn new() -> Hypeerlog<Murmur3BuildHasher> {
+        Self::with_percision(14)
         Self::with_percision(14)
     }
 
@@ -162,6 +176,8 @@ impl Hypeerlog {
 
     /// Inserts data to this Hyperloglog to count the cardinality
     pub fn insert<H: Hash>(&mut self, data: H) {
+    /// Inserts data to this Hyperloglog to count the cardinality
+    pub fn insert<H: Hash>(&mut self, data: H) {
         let mut hasher = self.hasher.build_hasher();
         data.hash(&mut hasher);
         let hash = hasher.finish();
@@ -169,6 +185,8 @@ impl Hypeerlog {
         self.registers[register_idx] = longest_run(self.percision, hash).max(self.registers[register_idx]);
     }
 
+    /// Inserts a whole slice of data to this Hyperloglog to count the cardinality
+    pub fn insert_many<H: Hash>(&mut self, data: &[H]) {
     /// Inserts a whole slice of data to this Hyperloglog to count the cardinality
     pub fn insert_many<H: Hash>(&mut self, data: &[H]) {
         for elem in data {
@@ -220,6 +238,11 @@ impl Hypeerlog {
             return Err(());
         }
 
+        self.registers.iter_mut()
+            .zip(other.registers.iter())
+            .for_each(|(a, b)| *a = a.clone().max(b.clone()));
+
+        Ok(self)
         self.registers.iter_mut()
             .zip(other.registers.iter())
             .for_each(|(a, b)| *a = a.clone().max(b.clone()));
