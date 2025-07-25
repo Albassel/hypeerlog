@@ -22,6 +22,7 @@
 //! 
 //! let mut hll = Hypeerlog::new();
 //! hll.insert_many(&elems);
+//! hll.insert_many(&elems);
 //! 
 //! // Should be within 2% of the real cardinality
 //! hll.cardinality();
@@ -39,10 +40,13 @@
 //! 
 //! let mut hll_one = Hypeerlog::new();
 //! hll_one.insert_many(&elems[0..5]);
+//! hll_one.insert_many(&elems[0..5]);
 //! 
 //! let mut hll_two = Hypeerlog::new();
 //! hll_two.insert_many(&elems[5..]);
+//! hll_two.insert_many(&elems[5..]);
 //! 
+//! hll_one.merge(hll_two).unwrap().cardinality();
 //! hll_one.merge(hll_two).unwrap().cardinality();
 //! ```
 //! 
@@ -168,6 +172,7 @@ impl Hypeerlog {
     /// Inserts a whole slice of data to this Hyperloglog to count the cardinality
     pub fn insert_many<H: Hash>(&mut self, data: &[H]) {
         for elem in data {
+            self.insert(elem);
             self.insert(elem);
         }
     }
