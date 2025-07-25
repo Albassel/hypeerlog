@@ -22,6 +22,7 @@
 //! 
 //! let mut hll = Hypeerlog::new();
 //! hll.insert_many(&elems);
+//! hll.insert_many(&elems);
 //! 
 //! // Should be within 2% of the real cardinality
 //! hll.cardinality();
@@ -39,10 +40,13 @@
 //! 
 //! let mut hll_one = Hypeerlog::new();
 //! hll_one.insert_many(&elems[0..5]);
+//! hll_one.insert_many(&elems[0..5]);
 //! 
 //! let mut hll_two = Hypeerlog::new();
 //! hll_two.insert_many(&elems[5..]);
+//! hll_two.insert_many(&elems[5..]);
 //! 
+//! hll_one.merge(hll_two).unwrap().cardinality();
 //! hll_one.merge(hll_two).unwrap().cardinality();
 //! ```
 //! 
@@ -107,12 +111,26 @@ where
             registers: bytes,
         })
     }
+
+    /// Reloads a dumped hll with the given hasher
+    /// Returns an error when the bytes passed are not a valud hll
+    pub fn load_with_hasher(mut bytes: Vec<u8>, hasher_builder: S) -> Result<Self, ()> {
+        let p = bytes.pop();
+        if p.is_none() {return Err(());}
+        if bytes.len() != (pow_two(p.unwrap()) as usize) {return Err(());}
+        Ok(Hypeerlog {
+            hasher: hasher_builder,
+            percision: p.unwrap(),
+            registers: bytes,
+        })
+    }
 }
 
 
 impl Hypeerlog {
     /// Create a new hll with a percision of 14 (sufficient for most cases)
     pub fn new() -> Hypeerlog<Murmur3BuildHasher> {
+        Self::with_percision(14)
         Self::with_percision(14)
     }
 
@@ -158,6 +176,8 @@ impl Hypeerlog {
 
     /// Inserts data to this Hyperloglog to count the cardinality
     pub fn insert<H: Hash>(&mut self, data: H) {
+    /// Inserts data to this Hyperloglog to count the cardinality
+    pub fn insert<H: Hash>(&mut self, data: H) {
         let mut hasher = self.hasher.build_hasher();
         data.hash(&mut hasher);
         let hash = hasher.finish();
@@ -167,7 +187,10 @@ impl Hypeerlog {
 
     /// Inserts a whole slice of data to this Hyperloglog to count the cardinality
     pub fn insert_many<H: Hash>(&mut self, data: &[H]) {
+    /// Inserts a whole slice of data to this Hyperloglog to count the cardinality
+    pub fn insert_many<H: Hash>(&mut self, data: &[H]) {
         for elem in data {
+            self.insert(elem);
             self.insert(elem);
         }
     }
@@ -215,6 +238,11 @@ impl Hypeerlog {
             return Err(());
         }
 
+        self.registers.iter_mut()
+            .zip(other.registers.iter())
+            .for_each(|(a, b)| *a = a.clone().max(b.clone()));
+
+        Ok(self)
         self.registers.iter_mut()
             .zip(other.registers.iter())
             .for_each(|(a, b)| *a = a.clone().max(b.clone()));
