@@ -61,6 +61,9 @@ use utils::*;
 use murmur::{Murmur3BuildHasher};
 
 
+pub use utils::rel_error_from_p;
+
+
 /// A struct implementing HyperLogLog that is generic over the Hasher
 #[derive(Debug, PartialEq, Eq)]
 pub struct Hypeerlog<S = Murmur3BuildHasher> 
@@ -85,10 +88,23 @@ where
             registers: vec![0; pow_two(14) as usize],
         }
     }
+
     /// Creates a new instance with the given Hasher and percision
-    /// Silently clamps the percision to 4-25
+    /// Silently clamps the percision to 4-25, corresponding to a relative error of 26% all the way to 0.018% (the cardinality 
+    /// you will get will be at most this far off from the true cardinality)
     pub fn with_hasher_percision(percision: u8, hasher_builder: S) -> Self {
         let p = percision.clamp(4, 25);
+        Hypeerlog {
+            hasher: hasher_builder,
+            percision: p,
+            registers: vec![0; pow_two(p) as usize],
+        }
+    }
+
+    /// Creates a new instance with the given Hasher and relative error
+    /// Panics if the relative error passed is <0 or >1
+    pub fn with_hasher_relative_error(relative_err: f64, hasher_builder: S) -> Self {
+        let p = p_from_rel_error(relative_err) as u8;
         Hypeerlog {
             hasher: hasher_builder,
             percision: p,
@@ -108,52 +124,10 @@ where
             registers: bytes,
         })
     }
-}
 
-
-impl Hypeerlog {
-    /// Create a new hll with a percision of 14 (sufficient for most cases)
-    pub fn new() -> Hypeerlog<Murmur3BuildHasher> {
-        Self::with_percision(14)
-    }
-
-    /// Constructs a hll with the given percision
-    /// Silently clamps the percision to 4-20
-    pub fn with_percision(percision: u8) -> Hypeerlog<Murmur3BuildHasher> {
-        let p = percision.clamp(4, 20);
-        Hypeerlog {
-            hasher: Murmur3BuildHasher::new(0),
-            percision: p,
-            registers: vec![0; pow_two(p) as usize],
-        }
-    }
-
-    /// Constructs a new Hypeerlog with an internal hasher with the given seed
-    /// This can be useful when exposing the hll to outside users to prevent hash DoS
-    /// When constructing a new hll using this function, make sure to use a seed with an unexpected value
-    pub fn with_seed(seed: u32) -> Hypeerlog<Murmur3BuildHasher> {
-        Hypeerlog {
-            hasher: Murmur3BuildHasher::new(seed),
-            percision: 14,
-            registers: vec![0; pow_two(14) as usize],
-        }
-    }
-
-    /// Constructs a hll with the given percision and seed for the internal hasher
-    /// Silently clamps the percision to 4-20
-    /// This can be useful when exposing the hll to outside users to prevent hash DoS
-    /// When constructing a new hll using this function, make sure to use a seed with an unexpected value
-    pub fn with_percision_seed(percision: u8, seed: u32) -> Hypeerlog<Murmur3BuildHasher> {
-        let p = percision.clamp(4, 20);
-        Hypeerlog {
-            hasher: Murmur3BuildHasher::new(seed),
-            percision: p,
-            registers: vec![0; pow_two(p) as usize],
-        }
-    }
 
     /// The number of registeres used internally
-    pub fn registers(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.registers.len()
     }
 
@@ -169,7 +143,6 @@ impl Hypeerlog {
     /// Inserts a whole slice of data to this Hyperloglog to count the cardinality
     pub fn insert_many<H: Hash>(&mut self, data: &[H]) {
         for elem in data {
-            self.insert(elem);
             self.insert(elem);
         }
     }
@@ -234,6 +207,74 @@ impl Hypeerlog {
         clone.push(self.percision);
         clone
     }
+}
+
+
+impl Hypeerlog {
+    /// Create a new hll with a percision of 14, corresponding to a relative error of 0.8%, (the cardinality 
+    /// you will get will be at most this far off from the true cardinality, which is sufficient for most cases)
+    pub fn new() -> Hypeerlog<Murmur3BuildHasher> {
+        Self::with_percision(14)
+    }
+
+    /// Constructs a hll with the given percision
+    /// Silently clamps the percision to 4-25, corresponding to a relative error of 26% all the way to 0.018% (the cardinality 
+    /// you will get will be at most this far off from the true cardinality)
+    pub fn with_percision(percision: u8) -> Hypeerlog<Murmur3BuildHasher> {
+        let p = percision.clamp(4, 25);
+        Hypeerlog {
+            hasher: Murmur3BuildHasher::new(0),
+            percision: p,
+            registers: vec![0; pow_two(p) as usize],
+        }
+    }
+
+    /// Creates a new instance with the given relative error
+    /// Panics if the relative error passed is <0 or >1
+    pub fn with_relative_error(relative_err: f64) -> Self {
+        let p = p_from_rel_error(relative_err) as u8;
+        Hypeerlog {
+            hasher: Murmur3BuildHasher::new(0),
+            percision: p,
+            registers: vec![0; pow_two(p) as usize],
+        }
+    }
+
+    /// Constructs a new Hypeerlog with an internal hasher with the given seed
+    /// This can be useful when exposing the hll to outside users to prevent hash DoS
+    /// When constructing a new hll using this function, make sure to use a seed with an unexpected value
+    pub fn with_seed(seed: u32) -> Hypeerlog<Murmur3BuildHasher> {
+        Hypeerlog {
+            hasher: Murmur3BuildHasher::new(seed),
+            percision: 14,
+            registers: vec![0; pow_two(14) as usize],
+        }
+    }
+
+    /// Constructs a hll with the given percision and seed for the internal hasher
+    /// Silently clamps the percision to 4-25, corresponding to a relative error of 26% all the way to 0.018% (the cardinality 
+    /// you will get will be at most this far off from the true cardinality)
+    /// This can be useful when exposing the hll to outside users to prevent hash DoS attacks
+    pub fn with_percision_seed(percision: u8, seed: u32) -> Hypeerlog<Murmur3BuildHasher> {
+        let p = percision.clamp(4, 25);
+        Hypeerlog {
+            hasher: Murmur3BuildHasher::new(seed),
+            percision: p,
+            registers: vec![0; pow_two(p) as usize],
+        }
+    }
+
+    /// Creates a new instance with the given relative error and seed
+    /// Panics if the relative error passed is <0 or >1
+    /// This can be useful when exposing the hll to outside users to prevent hash DoS attacks
+    pub fn with_relative_error_seed(relative_err: f64, seed: u32) -> Self {
+        let p = p_from_rel_error(relative_err) as u8;
+        Hypeerlog {
+            hasher: Murmur3BuildHasher::new(seed),
+            percision: p,
+            registers: vec![0; pow_two(p) as usize],
+        }
+    }
 
     /// Reloads a dumped hll with the default hasher
     /// Returns an error when the bytes passed are not a valud hll
@@ -248,6 +289,10 @@ impl Hypeerlog {
         })
     }
 }
+
+
+
+
 
 
 

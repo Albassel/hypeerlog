@@ -43,3 +43,21 @@ pub fn get_alpha_m_bias(m: f64) -> f64 {
     }
 }
 
+
+
+/// Get the relative error corresponding to a specific p value
+#[inline]
+pub fn rel_error_from_p(p: u32) -> f64 {
+    1.04 / (2f64.powi(p as i32)).sqrt()
+}
+
+
+// Convert a relative error value into the corresponding percision
+#[inline]
+pub fn p_from_rel_error(target_rse: f64) -> u32 {
+    assert!(target_rse > 0.0, "target_rse must be > 0");
+    let m_target = (1.04 / target_rse).powi(2);
+    let p = (m_target.log2().ceil()) as u32;
+    p.clamp(4, 25);
+    p
+}
