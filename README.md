@@ -1,8 +1,6 @@
 # hypeerlog
 
- A **blazingly fast** HyperLogLog implementation in Rust that can be distributed across multiple devices
- 
- This implementes all optimizations in the Google paper (except sparse, which is planned for later):  https://research.google.com/pubs/archive/40671.pdf
+A fast, distributable, and lightweight HyperLogLog implementation with bias correction
  
 ## Usage
 
@@ -16,7 +14,7 @@ let elems = vec![1, 2, 3, 4, 5, 6, 7, 1, 1, 2];
 let mut hll = Hypeerlog::new();
 hll.insert_many(&elems);
 
-// Should be within 2% of the real cardinality
+// Should be within 1% of the real cardinality
 hll.cardinality();
 ```
 
