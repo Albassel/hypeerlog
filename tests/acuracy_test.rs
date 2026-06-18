@@ -5,6 +5,46 @@ use std::hash::Hash;
 
 
 
+
+fn generate_random_list_with_cardinality(length: usize, cardinality: usize) -> Result<Vec<u64>, String> {
+    if cardinality > length {
+        return Err("Cardinality cannot be greater than length.".to_string());
+    }
+    if length == 0 {
+        return Ok(vec![]);
+    }
+
+    let mut rng = rand::rng();
+    let mut unique_elems = HashSet::with_capacity(cardinality);
+    let mut result_list = Vec::with_capacity(length);
+
+    // Generate 'cardinality' unique elements
+    for _ in 0..cardinality {
+        loop {
+            let num = rng.random::<u64>();
+            if unique_elems.insert(num) { // Try to insert into the set; returns true if new
+                result_list.push(num);
+                break;
+            }
+            // If `num` was already in the set, loop again to generate another number
+        }
+    }
+
+    let unique_elems_vec: Vec<u64> = unique_elems.into_iter().collect();
+
+    for _ in 0..(length - cardinality) {
+        let random_index = rand::random_range(0..=unique_elems_vec.len() - 1);
+        result_list.push(unique_elems_vec[random_index]);
+    }
+
+    result_list.shuffle(&mut rng);
+
+    Ok(result_list)
+}
+
+
+
+
 #[test]
 fn test_accuracy() {
     let p_values = vec![6, 8, 10, 12];
@@ -57,45 +97,6 @@ fn test_merge() {
     let card = hll_three.cardinality();
 
     assert!(merged_card == card);
-}
-
-
-
-
-fn generate_random_list_with_cardinality(length: usize, cardinality: usize) -> Result<Vec<u64>, String> {
-    if cardinality > length {
-        return Err("Cardinality cannot be greater than length.".to_string());
-    }
-    if length == 0 {
-        return Ok(vec![]);
-    }
-
-    let mut rng = rand::rng();
-    let mut unique_elems = HashSet::with_capacity(cardinality);
-    let mut result_list = Vec::with_capacity(length);
-
-    // Generate 'cardinality' unique elements
-    for _ in 0..cardinality {
-        loop {
-            let num = rng.random::<u64>();
-            if unique_elems.insert(num) { // Try to insert into the set; returns true if new
-                result_list.push(num);
-                break;
-            }
-            // If `num` was already in the set, loop again to generate another number
-        }
-    }
-
-    let unique_elems_vec: Vec<u64> = unique_elems.into_iter().collect();
-
-    for _ in 0..(length - cardinality) {
-        let random_index = rand::random_range(0..=unique_elems_vec.len() - 1);
-        result_list.push(unique_elems_vec[random_index]);
-    }
-
-    result_list.shuffle(&mut rng);
-
-    Ok(result_list)
 }
 
 

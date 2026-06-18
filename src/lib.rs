@@ -50,6 +50,7 @@
 
 
 
+// TODO: no_std support
 
 use core::hash::Hash;
 use std::hash::{BuildHasher, Hasher};
@@ -289,6 +290,39 @@ impl Hypeerlog {
         })
     }
 }
+
+
+
+/// A convinient macro to create a Hypeerlog by directly adding elements to it, similar to the vec! macro
+#[macro_export]
+macro_rules! hll {
+    // Matches: hll![] or hll!()
+    () => {
+        $crate::Hypeerlog::new()
+    };
+    
+    // Matches: hll![elem; n] 
+    // Inserts the element `n` times into a default Hypeerlog instance
+    // This is not very useful since the cardinality would still be one but is added for completeness
+    ($elem:expr; $n:expr) => {{
+        let mut hll = $crate::Hypeerlog::new();
+        let elem = $elem;
+        for _ in 0..$n {
+            hll.insert(&elem);
+        }
+        hll
+    }};
+
+    // Matches: hll![1, 2, 3] or hll![1, 2, 3,]
+    ($($x:expr),+ $(,)?) => {{
+        let mut hll = $crate::Hypeerlog::new();
+        $(
+            hll.insert($x);
+        )+
+        hll
+    }};
+}
+
 
 
 
