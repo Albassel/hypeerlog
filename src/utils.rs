@@ -58,7 +58,14 @@ pub fn get_alpha_m_bias(m: f64) -> f64 {
 /// Get the relative error corresponding to a specific p value
 #[inline]
 pub fn rel_error_from_p(p: u32) -> f64 {
-    1.04 / (2f64.powi(p as i32)).sqrt()
+    #[cfg(not(feature = "no_std"))]
+    {
+        1.04 / (2f64.powi(p as i32)).sqrt()
+    }
+    #[cfg(feature = "no_std")]
+    {
+        1.04 / libm::sqrt(libm::pow(2f64, p as f64))
+    }
 }
 
 
@@ -66,88 +73,20 @@ pub fn rel_error_from_p(p: u32) -> f64 {
 #[inline]
 pub fn p_from_rel_error(target_rse: f64) -> u32 {
     assert!(target_rse > 0.0, "target_rse must be > 0");
-    let m_target = (1.04 / target_rse).powi(2);
-    let p = (m_target.log2().ceil()) as u32;
-    p.clamp(4, 25);
-    p
+
+    #[cfg(not(feature = "no_std"))]
+    {
+        let m_target = (1.04 / target_rse).powi(2);
+        let p = (m_target.log2().ceil()) as u32;
+        p.clamp(4, 25)
+    }
+    #[cfg(feature = "no_std")]
+    {
+        let m_target = libm::pow(1.04 / target_rse, 2.0);
+        let p = libm::ceil(libm::log2(m_target)) as u32;
+        p.clamp(4, 25)
+    }
 }
 
 
 
-
-
-
-// Adapted from production FDLIBM implementations using SWAR bit reduction.
-// Fully optimized, branchless, ILP-parallelized natural logarithm for no_std.
-// Will be used later when implementing no_std
-// pub fn no_std_ln(x: f64) -> f64 {
-//     let u = x.to_bits();
-//     let hx = (u >> 32) as u32;
-//     let mut k: i32;
-
-//     // Handle subnormals, zeros, negatives, and special float cases
-//     if hx < 0x00100000 {
-//         if (u & 0x7FFFFFFFFFFFFFFF) == 0 { return f64::NEG_INFINITY; }
-//         if (u & 0x8000000000000000) != 0 { return f64::NAN; }
-        
-//         // Scale out of subnormal range safely
-//         let x_scaled = x * 1.8014398509481984e16; // x * 2^54
-//         let u_scaled = x_scaled.to_bits();
-//         k = (((u_scaled >> 52) & 0x7FF) as i32) - 1023 - 54;
-//     } else if hx >= 0x7FF00000 {
-//         return x;
-//     } else {
-//         k = (hx as i32 >> 20) - 1023;
-//     }
-
-//     // Window Reduction via completely branchless bitwise mapping
-//     let mantissa_mask = u & 0x000FFFFFFFFFFFFF;
-    
-//     let shift_mask = (((hx & 0x000FFFFF) | 0x00100000) < 0x000EA09E) as u64;
-//     k -= shift_mask as i32;
-    
-//     // Optimized branchless blend
-//     let exp_bias = 0x3FE0000000000000 | (shift_mask << 52);
-//     let rem_bits = mantissa_mask | exp_bias;
-
-//     let f = f64::from_bits(rem_bits);
-    
-//     // Analytical reduction setup
-//     let f_minus_1 = f - 1.0;
-//     let s = f_minus_1 / (f + 1.0);
-//     let z = s * s;
-//     let w = z * z;
-
-//     // Polynomial coefficients
-//     const P1: f64 = 4.28571428578550184252e-01;
-//     const P2: f64 = 2.72728123801472225442e-01;
-//     const P3: f64 = 2.06975017800338417784e-01;
-    
-//     const Q1: f64 = 5.99999999999994648725e-01;
-//     const Q2: f64 = 3.33333329818377432918e-01;
-//     const Q3: f64 = 2.30660745775561754067e-01;
-
-//     // --- ILP Optimization: Parallel Polynomial Evaluation ---
-//     // Expanded out of .mul_add while retaining distinct execution trees
-//     let t1_inner = (w * P3) + P2;
-//     let t2_inner = (w * Q3) + Q2;
-
-//     let t1 = w * ((w * t1_inner) + P1);
-//     let t2 = z * ((w * t2_inner) + Q1);
-    
-//     let r = t1 + t2;
-
-//     let dk = k as f64;
-    
-//     // --- Algebraical Elimination ---
-//     let hff = 0.5 * f_minus_1 * f_minus_1;
-    
-//     let inner_poly = (s * r) - hff;
-//     let total_poly = f_minus_1 + ((s + s) * inner_poly) + (s * f_minus_1);
-    
-//     const LN2_HI: f64 = 6.93147180369123816490e-01;
-//     const LN2_LO: f64 = 1.90821492927058770002e-10;
-
-//     let log_ln2 = (dk * LN2_LO) + total_poly;
-//     (dk * LN2_HI) + log_ln2
-// }

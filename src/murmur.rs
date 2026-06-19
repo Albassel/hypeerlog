@@ -1,4 +1,4 @@
-use std::hash::{BuildHasher, Hasher};
+use core::hash::{BuildHasher, Hasher};
 
 
 const C1: u32 = 0xcc9e2d51;

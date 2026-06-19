@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "no_std", no_std)]
+
 
 #![allow(unused)]
 #![deny(
@@ -9,52 +11,64 @@
 
 //! # hypeerlog
 //!
-//! A blazingly fast HyperLogLog implementation that can be distributed across multiple devices
-//! 
-//! This implementes all optimizations in the Google paper (except sparse, which is planned for later):  https://research.google.com/pubs/archive/40671.pdf
-//! 
-//! ## Estimating cardinality
-//! 
+//! A blazingly fast HyperLogLog++ implementation designed for high-throughput, distributed cardinality estimation.
+//!
+//! This crate faithfully implements the Google [HyperLogLog++ paper](https://research.google.com/pubs/archive/40671.pdf), 
+//! including sparse/dense representation switching and standard bias correction.
+//!
+//! ## Estimating Cardinality
+//!
 //! ```rust
 //! use hypeerlog::Hypeerlog;
-//! 
+//!
 //! let elems = vec![1, 2, 3, 4, 5, 6, 7, 1, 1, 2];
-//! 
+//!
 //! let mut hll = Hypeerlog::new();
 //! hll.insert_many(&elems);
-//! 
-//! // Should be within 2% of the real cardinality
-//! hll.cardinality();
+//!
+//! // The estimation is guaranteed to be within the typical HLL error bounds (e.g., ~2%).
+//! assert_eq!(hll.cardinality().floor(), 7.0); 
 //! ```
-//! 
-//! ## Distributing the work
-//! 
-//! You can divide the dataset onto multiple computers, dump the hll when you finish adding the data, load the dump into another computer, merge all the hll, and then calculate the cardinality of the merged hll to get the cardinality for the whole dataset:
-//! 
-//! 
+//!
+//! ## Distributed Workloads & Merging
+//!
+//! HyperLogLog sketches are additive. You can distribute a massive dataset across multiple 
+//! workers, compute local sketches, and merge them later to find the total unique count.
+//!
 //! ```rust
 //! use hypeerlog::Hypeerlog;
-//! 
+//!
 //! let elems = vec![1, 2, 3, 4, 5, 6, 7, 1, 1, 2];
-//! 
+//!
 //! let mut hll_one = Hypeerlog::new();
 //! hll_one.insert_many(&elems[0..5]);
-//! 
+//!
 //! let mut hll_two = Hypeerlog::new();
 //! hll_two.insert_many(&elems[5..]);
-//! 
+//!
+//! // Merge the second sketch into the first
 //! let merged = hll_one.merge(hll_two).unwrap();
-//! merged.cardinality();
+//! assert_eq!(merged.cardinality().floor(), 7.0);
+//! ```
+//!
+//! ## `no_std` support
+//! 
+//! This crate provides `no_std` support using the no_std feature:
+//! 
+//! ```toml
+//! [dependencies]
+//! hypeerlog = { version = "0.3.1", features = ["no_std"] }
 //! ```
 //! 
+//! This allows you to use a lighweight performant HyperLogLog++ with minimal memory footprint in embedded environments.
+//! 
 
 
 
-// TODO: no_std support
 
 use core::hash::Hash;
-use std::hash::{BuildHasher, Hasher};
-use std::fmt::Debug;
+use core::hash::{BuildHasher, Hasher};
+use core::fmt::Debug;
 
 mod murmur;
 mod utils;
@@ -63,6 +77,21 @@ use murmur::{Murmur3BuildHasher};
 
 
 pub use utils::rel_error_from_p;
+
+
+// Handle vector allocation contextually
+#[cfg(feature = "no_std")]
+extern crate alloc;
+
+#[cfg(feature = "no_std")]
+use alloc::vec::Vec;
+#[cfg(feature = "no_std")]
+use alloc::vec;
+
+#[cfg(not(feature = "no_std"))]
+use std::vec::Vec;
+#[cfg(not(feature = "no_std"))]
+use std::vec;
 
 
 /// A struct implementing HyperLogLog that is generic over the Hasher
@@ -178,7 +207,18 @@ where
         if num_zero_registers > 0 && estimate < (2.5 * m) { 
             // Linear Counting formula: m * ln(m / V)
             // V is the number of zero registers.
-            estimate = m * (m / num_zero_registers as f64).ln();
+            // estimate = m * (m / num_zero_registers as f64).ln();
+
+            let ratio = m / num_zero_registers as f64;
+            
+            #[cfg(not(feature = "no_std"))]
+            {
+                estimate = m * ratio.ln();
+            }
+            #[cfg(feature = "no_std")]
+            {
+                estimate = m * libm::log(ratio); // libm::log is the natural log (ln)
+            }
         }
         estimate
     }
