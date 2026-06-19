@@ -69,7 +69,7 @@ pub fn rel_error_from_p(p: u32) -> f64 {
 }
 
 
-// Convert a relative error value into the corresponding precision
+/// Convert a relative error value into the corresponding precision
 #[inline]
 pub fn p_from_rel_error(target_rse: f64) -> u32 {
     assert!(target_rse > 0.0, "target_rse must be > 0");
