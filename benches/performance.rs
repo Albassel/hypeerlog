@@ -41,7 +41,7 @@ fn generate_random_list_with_cardinality(length: usize, cardinality: usize) -> R
 
 // Takes the true cardinality and the elements, and returns the estimated cardinality and the relative error
 fn run_trial<H: Hash>(p: u8, card: usize, elems: &[H]) -> (f64, f64) {
-    let mut hll = Hypeerlog::with_percision(p);
+    let mut hll = Hypeerlog::with_precision(p);
     hll.insert_many(elems);
     let estimated_cardinality = hll.cardinality();
     let relative_error = (estimated_cardinality as f64 - card as f64).abs() / card as f64;

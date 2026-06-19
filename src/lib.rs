@@ -72,7 +72,7 @@ where
     S: BuildHasher + Debug,
 {
     hasher: S,
-    percision: u8,
+    precision: u8,
     registers: Vec<u8>,
 }
 
@@ -85,19 +85,19 @@ where
     pub fn with_hasher(hasher_builder: S) -> Self {
         Hypeerlog {
             hasher: hasher_builder,
-            percision: 14,
+            precision: 14,
             registers: vec![0; pow_two(14) as usize],
         }
     }
 
-    /// Creates a new instance with the given Hasher and percision
-    /// Silently clamps the percision to 4-25, corresponding to a relative error of 26% all the way to 0.018% (the cardinality 
+    /// Creates a new instance with the given Hasher and precision
+    /// Silently clamps the precision to 4-25, corresponding to a relative error of 26% all the way to 0.018% (the cardinality 
     /// you will get will be at most this far off from the true cardinality)
-    pub fn with_hasher_percision(percision: u8, hasher_builder: S) -> Self {
-        let p = percision.clamp(4, 25);
+    pub fn with_hasher_precision(precision: u8, hasher_builder: S) -> Self {
+        let p = precision.clamp(4, 25);
         Hypeerlog {
             hasher: hasher_builder,
-            percision: p,
+            precision: p,
             registers: vec![0; pow_two(p) as usize],
         }
     }
@@ -108,7 +108,7 @@ where
         let p = p_from_rel_error(relative_err) as u8;
         Hypeerlog {
             hasher: hasher_builder,
-            percision: p,
+            precision: p,
             registers: vec![0; pow_two(p) as usize],
         }
     }
@@ -121,7 +121,7 @@ where
         if bytes.len() != (pow_two(p.unwrap()) as usize) {return Err(());}
         Ok(Hypeerlog {
             hasher: hasher_builder,
-            percision: p.unwrap(),
+            precision: p.unwrap(),
             registers: bytes,
         })
     }
@@ -137,8 +137,8 @@ where
         let mut hasher = self.hasher.build_hasher();
         data.hash(&mut hasher);
         let hash = hasher.finish();
-        let register_idx = get_bucket(self.percision, hash);
-        self.registers[register_idx] = longest_run(self.percision, hash).max(self.registers[register_idx]);
+        let register_idx = get_bucket(self.precision, hash);
+        self.registers[register_idx] = longest_run(self.precision, hash).max(self.registers[register_idx]);
     }
 
     /// Inserts a whole slice of data to this Hyperloglog to count the cardinality
@@ -150,19 +150,19 @@ where
 
 
     /// Checks whether the hll is empty (i,e there were no data inserted)
-    pub fn is_empty<H: Hash>(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.registers.iter().all(|&val| val == 0)
     }
 
     /// Clears all data inserted into the hll
-    pub fn clear<H: Hash>(&mut self) {
+    pub fn clear(&mut self) {
         self.registers.iter_mut().for_each(|r| *r = 0)
     }
 
 
     /// Returns the estimated cardinality for the values added so far
     pub fn cardinality(&self) -> f64 {
-        let m = pow_two(self.percision) as f64;
+        let m = pow_two(self.precision) as f64;
         let alpha_m = get_alpha_m_bias(m);
 
         let num_zero_registers = self.registers.iter().filter(|&&val| val == 0).count();
@@ -184,10 +184,10 @@ where
     }
 
     /// Merges 2 HyperLogLogs, returning the merged hll
-    /// The percision of the 2 hll must be the same or an error is returned
+    /// The precision of the 2 hll must be the same or an error is returned
     /// The 2 hll can use different hashers, but the hasher used for the merged hll is that of the first
     pub fn merge(mut self, other: Self) -> Result<Self, ()> {
-        if self.percision != other.percision {
+        if self.precision != other.precision {
             return Err(());
         }
 
@@ -205,27 +205,27 @@ where
     /// device, and merging the hll
     pub fn dump(&self) -> Vec<u8> {
         let mut clone = self.registers.clone();
-        clone.push(self.percision);
+        clone.push(self.precision);
         clone
     }
 }
 
 
 impl Hypeerlog {
-    /// Create a new hll with a percision of 14, corresponding to a relative error of 0.8%, (the cardinality 
+    /// Create a new hll with a precision of 14, corresponding to a relative error of 0.8%, (the cardinality 
     /// you will get will be at most this far off from the true cardinality, which is sufficient for most cases)
     pub fn new() -> Hypeerlog<Murmur3BuildHasher> {
-        Self::with_percision(14)
+        Self::with_precision(14)
     }
 
-    /// Constructs a hll with the given percision
-    /// Silently clamps the percision to 4-25, corresponding to a relative error of 26% all the way to 0.018% (the cardinality 
+    /// Constructs a hll with the given precision
+    /// Silently clamps the precision to 4-25, corresponding to a relative error of 26% all the way to 0.018% (the cardinality 
     /// you will get will be at most this far off from the true cardinality)
-    pub fn with_percision(percision: u8) -> Hypeerlog<Murmur3BuildHasher> {
-        let p = percision.clamp(4, 25);
+    pub fn with_precision(precision: u8) -> Hypeerlog<Murmur3BuildHasher> {
+        let p = precision.clamp(4, 25);
         Hypeerlog {
             hasher: Murmur3BuildHasher::new(0),
-            percision: p,
+            precision: p,
             registers: vec![0; pow_two(p) as usize],
         }
     }
@@ -236,7 +236,7 @@ impl Hypeerlog {
         let p = p_from_rel_error(relative_err) as u8;
         Hypeerlog {
             hasher: Murmur3BuildHasher::new(0),
-            percision: p,
+            precision: p,
             registers: vec![0; pow_two(p) as usize],
         }
     }
@@ -247,20 +247,20 @@ impl Hypeerlog {
     pub fn with_seed(seed: u32) -> Hypeerlog<Murmur3BuildHasher> {
         Hypeerlog {
             hasher: Murmur3BuildHasher::new(seed),
-            percision: 14,
+            precision: 14,
             registers: vec![0; pow_two(14) as usize],
         }
     }
 
-    /// Constructs a hll with the given percision and seed for the internal hasher
-    /// Silently clamps the percision to 4-25, corresponding to a relative error of 26% all the way to 0.018% (the cardinality 
+    /// Constructs a hll with the given precision and seed for the internal hasher
+    /// Silently clamps the precision to 4-25, corresponding to a relative error of 26% all the way to 0.018% (the cardinality 
     /// you will get will be at most this far off from the true cardinality)
     /// This can be useful when exposing the hll to outside users to prevent hash DoS attacks
-    pub fn with_percision_seed(percision: u8, seed: u32) -> Hypeerlog<Murmur3BuildHasher> {
-        let p = percision.clamp(4, 25);
+    pub fn with_precision_seed(precision: u8, seed: u32) -> Hypeerlog<Murmur3BuildHasher> {
+        let p = precision.clamp(4, 25);
         Hypeerlog {
             hasher: Murmur3BuildHasher::new(seed),
-            percision: p,
+            precision: p,
             registers: vec![0; pow_two(p) as usize],
         }
     }
@@ -272,7 +272,7 @@ impl Hypeerlog {
         let p = p_from_rel_error(relative_err) as u8;
         Hypeerlog {
             hasher: Murmur3BuildHasher::new(seed),
-            percision: p,
+            precision: p,
             registers: vec![0; pow_two(p) as usize],
         }
     }
@@ -280,12 +280,12 @@ impl Hypeerlog {
     /// Reloads a dumped hll with the default hasher
     /// Returns an error when the bytes passed are not a valud hll
     pub fn load(mut bytes: Vec<u8>) -> Result<Self, ()> {
-        let p = bytes.pop();
-        if p.is_none() {return Err(());}
-        if bytes.len() != (pow_two(p.unwrap()) as usize) {return Err(());}
+        let p = bytes.pop().ok_or(())?;
+        if p < 4 || p > 25 { return Err(()); }
+        if bytes.len() != (pow_two(p) as usize) {return Err(());}
         Ok(Hypeerlog {
             hasher: Murmur3BuildHasher::new(0),
-            percision: p.unwrap(),
+            precision: p,
             registers: bytes,
         })
     }
